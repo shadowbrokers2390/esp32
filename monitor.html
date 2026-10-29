@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Unit Monitor</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; padding: 20px; }
+    h1 { font-size: 1.4rem; margin-bottom: 16px; color: #94a3b8; }
+    .alert { background: #dc2626; color: white; padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; font-weight: 600; display: none; }
+    .alert.active { display: block; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 24px; }
+    .card { background: #1e293b; border-radius: 10px; padding: 16px; }
+    .card .label { font-size: 0.75rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+    .card .value { font-size: 1.6rem; font-weight: 700; margin-top: 4px; }
+    .card .value.warn { color: #f87171; }
+    .card .value.ok { color: #4ade80; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    th { text-align: left; color: #64748b; font-weight: 500; padding: 8px 6px; border-bottom: 1px solid #334155; }
+    td { padding: 8px 6px; border-bottom: 1px solid #1e293b; }
+    .badge { padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
+    .badge-dry { background: #166534; color: #bbf7d0; }
+    .badge-wet { background: #991b1b; color: #fecaca; }
+    .section-title { font-size: 0.85rem; color: #64748b; margin: 20px 0 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+  </style>
+</head>
+<body>
+  <h1>Unit Monitor</h1>
+  <div class="alert" id="alert"></div>
+  <div class="cards" id="cards">
+    <div class="card"><div class="label">Temp</div><div class="value" id="temp">--</div></div>
+    <div class="card"><div class="label">Humidity</div><div class="value" id="humidity">--</div></div>
+    <div class="card"><div class="label">Pressure</div><div class="value" id="pressure">--</div></div>
+    <div class="card"><div class="label">Water</div><div class="value" id="water">--</div></div>
+  </div>
+  <div class="section-title">Last 24 Readings</div>
+  <table>
+    <thead><tr><th>Time</th><th>Temp</th><th>Hum</th><th>Pressure</th><th>Water</th></tr></thead>
+    <tbody id="log"></tbody>
+  </table>
+
+  <script>
+    const supabase = createClient(
+      'https://upurkihouizxvycckraw.supabase.co',
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVwdXJraWhvdWl6eHZ5Y2NrcmF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMzMDg3MTQsImV4cCI6MjEwODg4NDcxNH0.8AmR-rlNGAHNpWE_qcFdwN0IA0aLkiWEuYZNr6bzEBo'
+    );
+    const UNIT_ID = '583e51fc-f6cd-435b-89bc-17acc7a8aa0b';
+
+    async function refresh() {
+      const { data } = await supabase.from('readings')
+        .select('*')
+        .eq('unit_id', UNIT_ID)
+        .order('created_at', { ascending: false })
+        .limit(24);
+
+      if (!data || data.length === 0) return;
+
+      const latest = data[0];
+
+      const tempEl = document.getElementById('temp');
+      tempEl.textContent = latest.temp_f + '°F';
+      tempEl.className = 'value ' + (latest.temp_f < 40 ? 'warn' : 'ok');
+
+      document.getElementById('humidity').textContent = latest.humidity_pct + '%';
+      document.getElementById('pressure').textContent = latest.pressure_hpa + ' hPa';
+
+      const waterEl = document.getElementById('water');
+      waterEl.textContent = latest.water_detected ? 'DETECTED' : 'Dry';
+      waterEl.className = 'value ' + (latest.water_detected ? 'warn' : 'ok');
+
+      const alertEl = document.getElementById('alert');
+      if (latest.temp_f < 40 || latest.water_detected) {
+        let msg = [];
+        if (latest.temp_f < 40) msg.push('LOW TEMP: ' + latest.temp_f + '°F');
+        if (latest.water_detected) msg.push('WATER DETECTED');
+        alertEl.textContent = '⚠ ' + msg.join(' · ');
+        alertEl.classList.add('active');
+      } else {
+        alertEl.classList.remove('active');
+      }
+
+      const log = document.getElementById('log');
+      log.innerHTML = data.map(r => `<tr>
+        <td>${new Date(r.created_at).toLocaleString()}</td>
+        <td>${r.temp_f}°F</td>
+        <td>${r.humidity_pct}%</td>
+        <td>${r.pressure_hpa}</td>
+        <td><span class="badge ${r.water_detected ? 'badge-wet' : 'badge-dry'}">${r.water_detected ? 'WET' : 'DRY'}</span></td>
+      </tr>`).join('');
+    }
+
+    refresh();
+    setInterval(refresh, 30000);
+  </script>
+</body>
+</html>   
